@@ -12,6 +12,7 @@ import { execFile } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 
 const MARKER = 'CEZ_TASK_ID';
+const SCAN_BATCH = 64;
 
 export interface TaskProcess {
   pid: number;
@@ -82,20 +83,23 @@ async function listLinux(): Promise<TaskProcess[]> {
     return [];
   }
   const found: TaskProcess[] = [];
-  await Promise.all(
-    entries.map(async (name) => {
-      if (!/^\d+$/.test(name)) return;
-      try {
-        // Another user's environ is unreadable (EACCES) — exactly the processes that are not ours.
-        const taskId = taskIdFromEnviron(await readFile(`/proc/${name}/environ`, 'utf8'));
-        if (!taskId) return;
-        const cmdline = await readFile(`/proc/${name}/cmdline`, 'utf8').catch(() => '');
-        found.push({ pid: Number(name), taskId, command: capCommand(cmdline.split('\0').join(' ')) });
-      } catch {
-        // exited mid-scan, or not ours
-      }
-    }),
-  );
+  const pids = entries.filter((name) => /^\d+$/.test(name));
+  // Batched: one open per process at once could hit EMFILE on a busy host and miss processes.
+  for (let i = 0; i < pids.length; i += SCAN_BATCH) {
+    await Promise.all(
+      pids.slice(i, i + SCAN_BATCH).map(async (name) => {
+        try {
+          // Another user's environ is unreadable (EACCES) — exactly the processes that are not ours.
+          const taskId = taskIdFromEnviron(await readFile(`/proc/${name}/environ`, 'utf8'));
+          if (!taskId) return;
+          const cmdline = await readFile(`/proc/${name}/cmdline`, 'utf8').catch(() => '');
+          found.push({ pid: Number(name), taskId, command: capCommand(cmdline.split('\0').join(' ')) });
+        } catch {
+          // exited mid-scan, or not ours
+        }
+      }),
+    );
+  }
   const parents = new Map<number, number | undefined>();
   let pid: number | undefined = process.pid;
   while (pid !== undefined && pid > 1 && !parents.has(pid)) {
