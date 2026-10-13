@@ -55,9 +55,9 @@ the worktree. It also catches orphans from cezar versions before this fix.
 
 ### Phase 1: Process discovery and reaping
 
-- [ ] 1.1 task-processes module with parsers, list and reap, plus unit tests
+- [x] 1.1 task-processes module with parsers, list and reap, plus unit tests — a39739fa
 
 ### Phase 2: Lifecycle wiring
 
-- [ ] 2.1 Reap on settle and boot sweep in RunManager, kill switch and docs
-- [ ] 2.2 Agent guidance line in the dispatch prompt
+- [x] 2.1 Reap on settle and boot sweep in RunManager, kill switch and docs — 3eddf704
+- [x] 2.2 Agent guidance line in the dispatch prompt — 9bf2a8e4
