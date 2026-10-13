@@ -51,6 +51,8 @@ the worktree. It also catches orphans from cezar versions before this fix.
 
 ## Progress
 
+PR: #1419
+
 > Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands. Do not rename step titles.
 
 ### Phase 1: Process discovery and reaping
@@ -61,3 +63,7 @@ the worktree. It also catches orphans from cezar versions before this fix.
 
 - [x] 2.1 Reap on settle and boot sweep in RunManager, kill switch and docs — 3eddf704
 - [x] 2.2 Agent guidance line in the dispatch prompt — 9bf2a8e4
+
+### Review fixes
+
+- [x] R.1 Batch the /proc scan (review finding) — 807fb9c8
