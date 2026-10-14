@@ -20,5 +20,10 @@ Untrusted links must remain sanitized. Document previews share this renderer and
 
 ### Phase 1: Fix and prove
 
-- [ ] 1.1 Reproduce and fix local file link rendering
+- [x] 1.1 Reproduce and fix local file link rendering
 - [ ] 1.2 Validate, review, and publish
+
+## Evidence
+- Original NDJSON final reply contains a bare relative Markdown destination; `[blocked]` is added by rehype-harden before urlTransform.
+- Six regression cases fail with original source; 50 targeted component/helper tests pass with fix.
+- Typecheck passes. Full gate and browser QA in progress.
