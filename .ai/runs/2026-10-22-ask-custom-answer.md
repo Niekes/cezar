@@ -52,5 +52,5 @@ context before answering, right on the ask card — and make every agent underst
 
 ### Phase 2: Agents
 
-- [ ] 2.1 CEZ:ASK instructions cover custom and need-more-info answers
-- [ ] 2.2 Codex bridge keeps a single-select answer whole
+- [x] 2.1 CEZ:ASK instructions cover custom and need-more-info answers — f84613e7
+- [x] 2.2 Codex bridge keeps a single-select answer whole — 3f60ad6b
