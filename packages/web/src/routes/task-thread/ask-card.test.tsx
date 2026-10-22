@@ -505,3 +505,16 @@ describe('AskCard — Other… and Need more info', () => {
     expect(ownAnswer().value).toBe('Temporal')
   })
 })
+
+describe('AskCard — Other… focus', () => {
+  it('focuses the field when opened, but not when an open field remounts', () => {
+    const first = renderAsk(twoQuestionAsk)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Other…' })[0]!)
+    expect(document.activeElement).toBe(screen.getByRole('textbox'))
+    first.unmount()
+
+    renderAsk(twoQuestionAsk)
+    expect(screen.getByRole('textbox')).toBeTruthy()
+    expect(document.activeElement).not.toBe(screen.getByRole('textbox'))
+  })
+})

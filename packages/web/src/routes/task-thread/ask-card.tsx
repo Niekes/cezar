@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import type { ApiRun } from '@open-mercato/cezar-api-client'
 import { Button } from '@/components/ui/button'
@@ -217,6 +217,15 @@ function AskQuestionBlock({
 }) {
   const multiSelect = question.multiSelect === true
   const otherOpen = answer.other !== undefined
+  const otherInput = useRef<HTMLTextAreaElement>(null)
+  // Focus only on the click that opens the field — never `autoFocus`, which would also fire
+  // when a virtualized row remounts on scroll and yank the viewport to it.
+  const [focusOther, setFocusOther] = useState(false)
+  useEffect(() => {
+    if (!focusOther) return
+    otherInput.current?.focus()
+    setFocusOther(false)
+  }, [focusOther])
   // A pick that settles the question: sent at once on a one-tap card, held otherwise.
   const settle = (next: AskQuestionAnswer) => (oneTap ? onSubmit(next) : onChange(next))
 
@@ -233,12 +242,14 @@ function AskQuestionBlock({
 
   // Own text sits beside the picked options on a multi-select question, and replaces them on
   // a single-select one.
-  const toggleOther = () =>
-    onChange(
-      otherOpen
-        ? { labels: answer.labels }
-        : { labels: multiSelect ? answer.labels : [], other: '' },
-    )
+  const toggleOther = () => {
+    if (otherOpen) {
+      onChange({ labels: answer.labels })
+      return
+    }
+    onChange({ labels: multiSelect ? answer.labels : [], other: '' })
+    setFocusOther(true)
+  }
 
   const toggleMoreInfo = () => (answer.moreInfo ? onChange(EMPTY_ANSWER) : settle({ labels: [], moreInfo: true }))
 
@@ -281,7 +292,7 @@ function AskQuestionBlock({
         {otherOpen ? (
           <div data-slot="ask-other-input" className="flex flex-col gap-2">
             <Textarea
-              autoFocus
+              ref={otherInput}
               rows={2}
               aria-label={`Your own answer: ${question.question}`}
               placeholder="Type your own answer"
