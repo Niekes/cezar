@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -14,7 +14,7 @@ function delivery(overrides: Partial<DeliveryRecord> = {}): DeliveryRecord {
     status: 'delivered', completedAt: at(0), attempts: 1, body: 'frozen original', ...overrides };
 }
 async function fixture(old: DeliveryRecord) {
-  const dir = mkdtempSync(join(tmpdir(), 'webhook-payload-retention-')); dirs.push(dir);
+  const dir = mkdtempSync(join(realpathSync(tmpdir()), 'webhook-payload-retention-')); dirs.push(dir);
   let now = start;
   const deps = { now: () => now };
   const repo = await AdmissionRepository.open(dir, deps);

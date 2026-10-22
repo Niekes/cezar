@@ -7,6 +7,13 @@ import { WebhookCoordinator } from './coordinator.ts';
 import { RunStore } from '../runs/store.ts';
 import { RunManager } from '../workflows/run.ts';
 import { ProjectContexts, type ProjectContext } from '../server/project-context.ts';
+// Repository identity lookup is unrelated to context ownership. Keep its background
+// gh process from holding the fixture directory open during Windows teardown.
+vi.mock('../server/forge/github.ts', async original => ({
+  ...await original<typeof import('../server/forge/github.ts')>(),
+  resolveRepoHandle: async () => null,
+}));
+
 it('delivers a durable failure through disk fallback after lazy context recovery rejects', async () => {
   vi.stubEnv('CEZ_WEBHOOKS', '1'); vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-20T10:00:00Z'));

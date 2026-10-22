@@ -28,7 +28,8 @@ export class ProjectLimits {
     // write failure here must not make the next boot mistake missing state for a fresh budget.
     await copyFile(statePath(directory, 'limits.json'), quarantine, constants.COPYFILE_EXCL);
     await chmod(quarantine, 0o600);
-    const evidence = await open(quarantine, constants.O_RDONLY | constants.O_NOFOLLOW);
+    // Windows FlushFileBuffers requires a writable handle, even for a copied file.
+    const evidence = await open(quarantine, constants.O_RDWR | constants.O_NOFOLLOW);
     try { await evidence.sync(); } finally { await evidence.close(); }
     await syncDirectory(directory);
     console.warn(`Webhook limits.json was unreadable and has been quarantined as ${quarantine}; budgets restart empty.`);
