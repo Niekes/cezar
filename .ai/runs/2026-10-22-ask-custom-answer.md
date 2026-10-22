@@ -47,8 +47,8 @@ context before answering, right on the ask card — and make every agent underst
 
 ### Phase 1: Cockpit
 
-- [ ] 1.1 Per-question answer model with Other and Need more info
-- [ ] 1.2 Ask card unit tests
+- [x] 1.1 Per-question answer model with Other and Need more info — 9040b926
+- [x] 1.2 Ask card unit tests — 9040b926
 
 ### Phase 2: Agents
 
