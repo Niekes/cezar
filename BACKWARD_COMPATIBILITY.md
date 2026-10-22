@@ -28,6 +28,36 @@ Breaking: renaming/removing a command, flag, alias or env var; changing a defaul
 
 ## 2. HTTP API of the cockpit server (`packages/cezar/src/server/server.ts`)
 
+- Webhook receiver `format` accepts `cezar.json.v1` (default), `slack.v1`, and `discord.v1`.
+  An omitted format means cezar JSON. Create/edit requests validate chat URLs for the selected
+  format. Delivery records snapshot the format; provider rendering uses the public event schema.
+  Chat create responses return `secret` as an empty
+  string, and chat signing-key rotation returns 409. Discord aliases normalize on save. Switching
+  format invalidates pending deliveries through the existing delivery revision fence.
+- Outbound lifecycle webhooks (additive, `CEZ_WEBHOOKS=1` only): `GET/POST /api/v1/webhooks`,
+  `GET /api/v1/webhooks/history`, `GET /api/v1/webhooks/events`,
+  `POST /api/v1/webhooks/notice/acknowledge`, `PATCH/DELETE /api/v1/webhooks/:id`,
+  `GET /api/v1/webhooks/:id/{deliveries,activity}`,
+  `POST /api/v1/webhooks/:id/{test,activate,pause,resume,rotate-secret}`,
+  `POST /api/v1/webhooks/deliveries/:deliveryId/{retry,replay}`. The same chained family is mounted
+  under `/api/v1/p/:projectId`; the boot alias and reserved `default` resolve to its canonical
+  project. All routes remain registered with the flag off and return 409 naming it — or naming the
+  unsupported platform first — before storage. Request/response Zod schemas live in
+  `packages/contract/src/webhooks.ts`; strict mutations reject
+  unknown fields. Stale `expectedRevision` is 409; manual operation IDs are durably idempotent.
+  Lists never expose secrets or full destinations; create/rotate return the key once with no-store.
+  A receiver may add `pauseReason` while this server paused it — `project_removal` when removing a
+  project paused it, `user` for a cockpit pause; the field is omitted outside the paused state.
+  Delivery/history pages are bounded to 100 with opaque scope-bound cursors. Deleted receiver IDs
+  serve a read-only `kind: history` identity until retained history expires; mutations return 404.
+  Project SSE emits `change`/`resync` invalidations with `{changeSequence}` and `ping` keepalives
+  with `{}` every 15 seconds. No payload bodies or credentials are sent. The stream is consumed through the Node-free api-client decoder and never placed on the workspace WS bus.
+  `GET /api/v1/health` adds boolean `capabilities.webhooks` (and
+  `capabilities.webhooksUnavailableReason: 'unsupported_platform'` where no verified identity
+  exists). Project removal can add a `warning`
+  when durable receiver pause was not possible; existing removal success semantics are preserved.
+  The graph-node flag `CEZ_WORKFLOW_WEBHOOKS`, its payload and execution behavior are unchanged.
+
 **Every route lives under `/api/v1`.** The unversioned `/api/*` surface was REMOVED (see the breaking entry in CHANGELOG.md): the paths below are the real URLs; the project-scoped ones also answer at `/api/v1/p/<projectId>/<path>`. A future `v2` mounts beside `v1` rather than editing these paths.
 
 Consumed by the bundled React cockpit (`packages/cezar/web/dist`, shipped in lockstep — low risk) and by anyone scripting `localhost:4321`. Saved bookmarklets do NOT call the API — since GitHub's CSP blocked cross-origin probes they only open a page URL (`packages/web/src/lib/bookmarklet.ts`), which is why removing the unversioned surface did not break them.
@@ -111,6 +141,7 @@ What is protected now: **the shape of each route under `/api/v1`**, the three-wa
   - `GET /api/v1/github/search?kind=issue|pr&q=<text>&limit=<n>` (#730) is additive: the list call (`GET /api/v1/github`) returns the **open** set only — `gh issue list` / `gh pr list` default to `--state open` — so the tab's in-memory filter structurally cannot match a closed or merged item, and this endpoint is the cross-state lookup it falls back to. `kind` and a 1–256-char `q` are required, `limit` is optional and capped at `GH_SEARCH_MAX` (50); anything malformed is a `400 {error}`. The response is `{available, items, truncated?, labelColors?}` — `items` are the same `githubItemSchema` rows the list ships, with `checks` always `null` (hydrated lazily through `/api/v1/github/checks` like list rows) — or `{available: false, reason}`, degrading exactly like the list and never a 5xx. `GET /api/v1/github`'s response shape is untouched.
   - `GET /api/v1/github/ref-status?prs=<csv>&issues=<csv>` is additive and is the batched read behind a task's PR/issue chip (one request per project for a whole table, not one per chip). Both query keys are optional and at least one must name something (400 otherwise); each is a comma-separated list of positive numbers capped at 100 (400 on a malformed list). The response is `{available: true, prs, issues, conflicts?, recheckAfterMs}` — two `number → status` maps plus the cadence — or `{available: false, reason, recheckAfterMs}`, degrading in the payload exactly like `/github/checks`, never a 5xx. `recheckAfterMs` is how long the answer holds (milliseconds), or `null` for "nothing in this answer can change; do not schedule anything": the SERVER owns that judgement, because whether a status can still move is forge semantics and lives next to the cache that decides whether asking would even reach GitHub. A client is expected to obey it rather than keep its own table. A number the forge does not know is **absent** from its map rather than present with a fallback: absent means "nothing is known", which the cockpit paints as the neutral chip it painted before statuses existed, and collapsing that into a status would let "we could not ask" render as "nothing is wrong". The status vocabulary is `draft | review-required | changes-requested | checks-pending | checks-failing | ready | merged | closed` for PRs and `open | completed | not-planned` for issues; adding a value is additive (an unknown one renders neutral), renaming or removing one is breaking. `conflicts` is an **optional additive** list of the PR numbers the forge reports as `CONFLICTING` — a second axis, never folded into the status, because a pull request can be `ready` (open, green, nobody waited on) and unmergeable at the same time and one word cannot say both. It rides the same GraphQL node the statuses come from, so it costs no extra request, and it names OPEN pull requests only. Its **absence means "nothing is known about mergeability"** — an older server omits the key entirely, and GitHub's own still-computing `UNKNOWN` is never listed — so a client must not read a missing number as "merges cleanly"; the cockpit paints the conflict chip on `true` alone. Removing the key, or letting it mean "no conflicts", is breaking. GitHub computes mergeability on demand and answers `UNKNOWN` while it does, so a batch holding such a reference comes back with a **much shorter `recheckAfterMs` (seconds, not the usual minute)** for as long as that is plausibly still being computed — the one existing knob, used as designed: a client obeys the cadence rather than keeping its own, and the server never caches a non-answer for as long as an answer.
 - **Content negotiation on the two mixed-format routes — additive, and the query flags stay the wire.** `GET /api/v1/repo/commit/:sha` serves the legacy `text/plain` blob or the structured `{sha, subject, author, when, files, stat}` payload; `GET /api/v1/runs/:id/files` serves the JSON listing/metadata or an image file's raw BYTES. Both now also read the request's `Accept` header, under a fixed precedence: **(1) the query flag whenever the request carries it** (`?structured=`, `?raw=` — present-but-not-`1` is an explicit opt-out, so a header can never override a caller that said what it wanted in the URL), **(2) otherwise the best `Accept` match**, **(3) otherwise the route's established default** — the text blob for `/repo/commit/:sha`, the JSON listing for `/runs/:id/files`. `*/*` matches nothing, deliberately: it is what `fetch`, `curl` and XHR send when they have no preference, so **every existing caller's answer is byte-identical**. Both routes answer `Vary: Accept`, and each response carries the `Content-Type` of what it actually sent. The one behavioural addition is that a client whose `Accept` really does ask for the other representation now gets it — e.g. an `<img>` or a browser navigation to a worktree image receives the bytes, with the same allowlist, size cap, `nosniff` and sandbox CSP the `raw=1` path has always applied. A negotiated (as opposed to flag-driven) image preference that the resource cannot satisfy falls back to the JSON representation rather than 409ing; `?raw=1` keeps its 409 and its exact wording. Breaking: changing that precedence, making `*/*` select a non-default representation, or letting `Accept` override a present query flag.
+- **`GET /api/v1/runs/:id/files` for a run with `worktree: false` now applies `/repo/files`' index guard** (2026-10-19). Such a run browses the user's REAL checkout, so an ignored untracked path (`.env`, `.ai/cezar/**` including webhook signing keys) answers `409 {error: 'path is not in the repository index: <path>'}` — the same sentence whether it exists or not — and directory listings omit ignored entries. Tracked and untracked-but-not-ignored paths, and every worktree-backed run, answer exactly as before. This is a security fix narrowing what was always meant to be unreachable; relaxing it is breaking.
 - Agent config (spec #404, additive): `GET /api/v1/agent-config`, `GET/PUT /api/v1/agent-config/:id` — writes 409 in hosted mode (`CEZ_REMOTE`) by design
 - SSE event names: `run-event` (v1), `ui-event` (v2 dotted types), `provider-status` (workspace-only host provider row)
 
@@ -138,6 +169,20 @@ What is protected now: **the shape of each route under `/api/v1`**, the three-wa
 Breaking: removing/renaming a route; making a previously optional body field required; removing a response field; changing an SSE event name (`run`, `run-event`, `run-deleted`, `todos`, `usage`, `ping` — or, on the workspace stream, `project-added`, `project-removed`, `checkout-progress`, `provider-status`, `automation-change`) or the `seq` dedup contract; breaking the three-way alias parity (an unscoped `/api/v1/*` answer diverging in status, content type or body from its `/api/v1/p/<boot>`/`/api/v1/p/default` spellings); changing the scoped 404/409 project-resolution contract or the meaning of the `default` alias; stamping or widening the boot-project `/api/v1/events` stream; narrowing `/api/v1/health` CORS or its fields; changing `/new` query parameters (breaks saved bookmarklets); **dropping the legacy-flat → `/p/<boot>` page redirect** — or letting it lose the query/hash, which is the same break one step quieter; changing the meaning of the `default` page alias; moving a settings section without leaving its old URL redirecting to the new one. Required path: additive first; if removal is unavoidable, keep the old route/field answering for one minor release and note it in the CHANGELOG. `/new` deserves extra caution — it lives in users' browsers (saved bookmarklets), not in this repo.
 
 ## 3. `.ai/cezar/` state files (`packages/cezar/src/runs/store.ts` and friends)
+
+- `webhooks/` is private opt-in state, covered by `ensureDataGitignore` in boot and lazy project
+  contexts and verified ignored/untracked before secrets are written. Files include root-bound
+  installation identity, endpoints/keys/revisions/activation fences, ownership proof, bounded outbox
+  and admission records, failure-episode identities, rate budgets and masked history/activity.
+  JSON stores carry version 1 and atomic replacement; outbox data never enters run NDJSON, prompts
+  or transcript replay. Dry-run uses separate `webhooks/dry-run/` state. Copied root state resets
+  instead of inheriting destinations/keys. No file is user-authored or required for default boot.
+  Run records add optional `attentionRequest` and `completionReason` fields; older records and the
+  default/headless workflow path remain valid. These fields are cleared when their lifecycle ends.
+  `CEZ_WEBHOOKS` is default-off; no CLI webhook commands or agent skills are added. Published JSON
+  events use `schemaVersion: 1`, stable event IDs and Standard Webhooks headers. The guide, JSON
+  Schema are repository documentation assets, not service runtime imports.
+
 
 Written by one version, read by the next, and hand-editable by design:
 

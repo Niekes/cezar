@@ -1,0 +1,29 @@
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { WebhookCard } from './webhook-card'
+const state = vi.hoisted(() => ({ receivers: [] as { state: string; pendingCount: number }[], health: { status: 'degraded', reason: 'Retained delivery storage is full' } }))
+vi.mock('@/lib/project-router', () => ({ useActiveProjectId: () => 'alpha', Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span> }))
+vi.mock('@/hooks/use-webhooks', () => ({ useWebhookSubscription: vi.fn(), useWebhookList: () => ({ data: { receivers: state.receivers, webhookHealth: state.health }, isPending: false }) }))
+beforeEach(() => { state.receivers = []; state.health = { status: 'degraded', reason: 'Retained delivery storage is full' } })
+afterEach(cleanup)
+it('shows service degradation even when no receivers are suspended', () => {
+  render(<WebhookCard enabled />)
+  expect(screen.getByRole('status').textContent).toContain('Retained delivery storage is full')
+})
+it('clears current degradation once capacity recovers', () => {
+  const view = render(<WebhookCard enabled />)
+  state.health = { status: 'ready', reason: '' }
+  view.rerender(<WebhookCard enabled />)
+  expect(screen.queryByRole('status')).toBeNull()
+})
+it('does not tell an unsupported platform to enable delivery it cannot run', () => {
+  render(<WebhookCard enabled={false} unsupported />)
+  expect(screen.getByText(/Not available on this server’s platform/)).toBeTruthy()
+  expect(screen.queryByText(/Off on this server/)).toBeNull()
+})
+
+it('includes saved inactive receivers in the project summary', () => {
+  state.receivers = [{ state: 'inactive', pendingCount: 0 }]
+  render(<WebhookCard enabled />)
+  expect(screen.getByText('0 active · 0 paused · 1 inactive')).toBeTruthy()
+})
