@@ -99,7 +99,10 @@ export const agentAccountSelectionSchema = z.object({
   claude: z.string().optional(),
   codex: z.string().optional(),
   opencode: z.string().optional(),
+  junie: z.string().optional(),
+  cursor: z.string().optional(),
   pi: z.string().optional(),
+  copilot: z.string().optional(),
 });
 export type AgentAccountSelection = z.infer<typeof agentAccountSelectionSchema>;
 
@@ -160,8 +163,8 @@ export type AgentProfileSelectionsResponse = z.infer<typeof agentProfileSelectio
 
 
 /** `GET /api/v1/workspace/agent-profiles/:id/status` — one account's auth state, probed for real.
- *  `?refresh=1` drops this account's cached answer and re-probes. Kept off the listing so a cold
- *  load pays no CLI spawn. */
+ *  `?refresh=1` drops this account's cached answer and re-probes; `?recheck=1` (the pane's Check
+ *  again) also lets that probe lift a dead login. Kept off the listing so a cold load pays no CLI spawn. */
 export const agentAccountStatusResponseSchema = z.object({ status: providerStatusSchema });
 export type AgentAccountStatusResponse = z.infer<typeof agentAccountStatusResponseSchema>;
 
