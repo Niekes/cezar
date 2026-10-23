@@ -1,7 +1,7 @@
 import { createServer } from 'node:net';
 
 /**
- * Check whether the loopback port used by the local cockpit is available.
+ * Check availability on the interface the HTTP server will bind (#1000).
  * The server performs the authoritative bind after selection; this is only
  * the interactive convenience probe.
  */
