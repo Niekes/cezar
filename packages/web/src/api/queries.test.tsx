@@ -77,7 +77,7 @@ const HEALTH = {
   repo: { root: '/home/me/cezar', branch: 'main' },
   checks: [],
   defaultRunner: 'claude',
-  capabilities: { localHandoff: true, followups: false, singleProject: false, automations: false },
+  capabilities: { localHandoff: true, terminal: false, followups: false, singleProject: false, automations: false },
 }
 
 /** Just enough WebSocket for useHealth's topic subscription (api/ws.ts): records the frames the
@@ -264,6 +264,22 @@ describe('provider status workspace query', () => {
     expect(result.current.data).toBeUndefined()
     expect(result.current.error).toBeInstanceOf(ApiError)
     expect((result.current.error as ApiError).message).toBe('provider probe failed')
+  })
+
+  it('retries a transient transport failure on a background provider read', async () => {
+    fetchMock
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(json(PROVIDERS))
+    const client = createQueryClient()
+    const { result } = renderHook(() => useProviderStatus(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 5000 })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('enters the query error state for a malformed successful response', async () => {
